@@ -1,0 +1,16 @@
+
+{
+    "risk_thresholds": {
+        "ship_as_is": 0.20,
+        "whatsapp_confirmation": 0.40,
+        "prepaid_nudge": 0.65
+    },
+    "business_rules": {
+        "hold_for_manual_review": true,
+        "never_auto_cancel": true
+    },
+    "prepaid_discount": {
+        "enabled": true,
+        "discount_amount": 20
+    }
+}

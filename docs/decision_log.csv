@@ -1,0 +1,7 @@
+
+order_id,predicted_rto_probability,name_quality,address_quality,decision_action,decision_reason,customer_response,response_time_hours,final_order_status
+CG101,0.6767,NORMAL,COMPLETE,HOLD_FOR_REVIEW,Very high predicted RTO risk; manual review required,NO_RESPONSE,24,PENDING_REVIEW
+CG102,0.1200,NORMAL,COMPLETE,SHIP_AS_IS,Low predicted RTO risk and valid customer details,NOT_REQUIRED,0,DELIVERED
+CG103,0.3200,NORMAL,COMPLETE,CONFIRM_ON_WHATSAPP,Moderate predicted RTO risk; customer confirmation required,YES,1,DELIVERED
+CG104,0.5200,NORMAL,COMPLETE,NUDGE_TO_PREPAID,High predicted RTO risk; prepaid payment encouraged,YES,2,DELIVERED
+CG105,0.7100,SUSPICIOUS,INCOMPLETE,HOLD_FOR_REVIEW,Customer details require manual verification,NO_RESPONSE,24,PENDING_REVIEW
