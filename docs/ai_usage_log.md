@@ -99,3 +99,23 @@ The historical dataset and model evaluation results were reviewed before definin
 ## 10. Responsible AI Approach
 
 CODGuard AI uses AI to support operational decisions while keeping final high-impact decisions under human control. The system is designed to reduce avoidable RTO costs without unfairly rejecting genuine customers.
+## 11. Examples of Weak AI Outputs and Corrections
+
+### Example 1: Inconsistent address validation
+- **Tool:** Ollama – Qwen2.5:3b.
+- **Weak output:** The LLM classified the same address differently across separate test runs, sometimes marking it COMPLETE and sometimes INCOMPLETE.
+- **How it was caught:** The output was tested more than once and the classifications were compared.
+- **Correction:** LLM validation was treated as an assistive signal rather than a final decision. Unclear or incomplete details are routed for manual review.
+
+### Example 2: Missing address information
+- **Tool:** Ollama – Qwen2.5:3b.
+- **Weak output:** During an early test, the LLM returned an address assessment without identifying all expected address components, including the postal code.
+- **How it was caught:** The generated JSON was inspected against the original customer address.
+- **Correction:** The output structure was made more explicit, and the application uses a safe fallback when the LLM response is incomplete or invalid. Physical address verification remains outside the LLM's capabilities.
+
+### Example 3: Model probability interpretation
+- **Tool:** Machine learning model and AI-assisted development.
+- **Potentially misleading interpretation:** A high predicted RTO probability could be mistaken for certainty that an individual order will become an RTO.
+- **How it was caught:** Test-set evaluation showed limited model performance, with ROC-AUC of 0.6727 and RTO precision of 0.4370.
+- **Correction:** Predictions are presented as risk estimates, not guaranteed outcomes. High-risk orders are held for human review, and automatic cancellation based solely on model predictions is disabled.
+
