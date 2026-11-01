@@ -1,138 +1,165 @@
-# CODGuard AI – Business Recommendation Memo
+# CODGuard AI — Business Decision Memo
 
-**To:** Founder, D2C Haircare Brand  
-**From:** CODGuard AI Project Team  
-**Date:** 31 October 2026  
-**Subject:** Reducing Cash-on-Delivery Returns to Origin (RTO)
+**Subject:** Reducing Cash-on-Delivery Return-to-Origin (RTO) Losses  
+**Prepared for:** D2C Haircare Operations and Marketing Teams
 
 ## 1. Executive Summary
 
-The business currently faces a significant Cash-on-Delivery (COD) return problem. COD orders have an approximate RTO rate of 28%, compared with approximately 4% for prepaid orders.
+CODGuard AI is a COD order risk-scoring and decision-support system designed to reduce avoidable Return-to-Origin (RTO) costs. It combines a machine-learning model, address/name validation using a local LLM, configurable business rules, and an intervention decision engine.
 
-CODGuard AI is a data-driven decision support system designed to identify potentially risky COD orders before shipment. It combines a machine learning model for RTO risk prediction, a locally hosted Large Language Model (LLM) for customer name and address quality checks, and configurable business rules.
+The model provides some ability to rank orders by RTO risk, but its time-based validation shows limited recall. It should therefore support prioritisation and manual review—not automatic cancellation.
 
-The system recommends four actions: Ship As-Is, WhatsApp Confirmation, Prepaid Nudge, and Hold for Manual Review.
+The recommended pilot uses WhatsApp confirmation, prepaid nudges and manual review, with actual intervention outcomes measured before claiming savings.
 
-**Recommendation:** Introduce CODGuard AI through a controlled pilot. Prioritize customer confirmation and prepaid conversion instead of automatically cancelling high-risk orders.
+## 2. Historical Data Findings
 
-## 2. Key Findings from Historical Order Data
+The completed dataset contains **1,987 orders**, after removing 30 exact duplicates and excluding one in-transit record.
 
-The supplied dataset contained 2,018 records. After removing 30 exact duplicate records and excluding one in-transit order, 1,987 completed orders were available for analysis.
+- Overall RTO rate: **28.43%** (565 RTOs out of 1,987 completed orders).
+- September 2026: **329 completed orders**, including 86 RTOs and 243 delivered orders.
+- September RTO rate: **26.14%**.
+- Estimated direct September RTO cost: **₹14,568.40**, using ₹169.40 per RTO.
 
-**Finding 1 – Significant RTO rate**
+Notable patterns:
 
-- Delivered orders: 1,422.
-- RTO orders: 565.
-- Actual RTO rate: 28.43%.
+- Customers with two previous RTOs had a 76.47% historical RTO rate, based on only 34 orders.
+- Orders marked with weak addresses had a 66.39% RTO rate, compared with 25.95% for other orders.
+- Meta Ads orders had a 31.24% RTO rate, compared with 22.92% for direct orders.
+- Bihar and Uttar Pradesh had higher observed RTO rates than several other states.
 
-This indicates a substantial opportunity to reduce avoidable COD-related logistics costs.
+These are historical associations, not proof of causation. Small groups and differences in customer mix should be considered before changing marketing or delivery policies.
 
-**Finding 2 – Previous RTO history is an important risk indicator**
+## 3. Model Performance and Validation
 
-| Previous RTO count | Orders | RTO rate |
-|---|---:|---:|
-| 0 | 1,845 | 27.15% |
-| 1 | 108 | 35.19% |
-| 2 | 34 | 76.47% |
+A Logistic Regression pipeline was selected after comparing it with Random Forest.
 
-Customers with two previous RTOs showed a much higher historical RTO rate. However, this group contains only 34 orders, so the result should be treated cautiously.
+**Time-based validation:**
 
-**Finding 3 – RTO rates vary across marketing channels**
-
-| Marketing source | Orders | RTO rate |
-|---|---:|---:|
-| Meta Ads | 765 | 31.24% |
-| Instagram Organic | 232 | 29.31% |
-| Google Ads | 244 | 28.28% |
-| Direct | 253 | 22.92% |
-
-Meta Ads has the highest RTO rate among these channels, while Direct has the lowest. Marketing source should be monitored as a risk signal, not used as an independent reason to reject orders.
-
-These are historical associations, not proof of causation. State, courier, campaign and customer differences may influence the results.
-
-## 3. Recommended Decision Rules
-
-The prototype uses the following configurable initial thresholds:
-
-| Predicted RTO risk | Recommended action |
-|---|---|
-| Below 20% | Ship As-Is |
-| 20% to below 40% | WhatsApp Confirmation |
-| 40% to below 65% | Prepaid Nudge |
-| 65% and above | Hold for Manual Review |
-
-Additional rules:
-
-- Incomplete addresses should be verified before shipment.
-- Suspicious or unclear customer details should trigger verification.
-- A YES response should confirm customer intent.
-- A NO response should create a cancellation request for review.
-- An unclear response should trigger a clarification message.
-- No response after 24 hours should lead to manual review.
-- High ML risk alone must never trigger automatic cancellation.
-
-These thresholds are starting assumptions. They must be evaluated against actual intervention outcomes before production deployment.
-
-## 4. Financial Impact and Operations vs Marketing Trade-off
-
-The assignment provides the following financial assumptions:
-
-| Metric | Amount |
+| Metric | Result |
 |---|---:|
-| Average order value | ₹649 |
-| Delivered gross profit per order (62%) | ₹402.38 |
-| Forward shipping | ₹65 |
-| Return shipping | ₹65 |
-| Packaging and handling | ₹25 |
-| Expected damage cost | ₹14.40 |
-| Direct expected cost per RTO | ₹169.40 |
-| Proposed prepaid discount | ₹20 |
+| Training orders | 1,569 |
+| Test orders | 418 |
+| Accuracy | 72.25% |
+| RTO precision | 41.18% |
+| RTO recall | 12.73% |
+| F1 score | 19.44% |
+| ROC-AUC | 0.6414 |
+| Brier score | 0.1851 |
 
-The expected direct RTO cost is ₹169.40 per returned order.
+The model's Brier score was modestly better than the training-period prevalence baseline of 0.1946. However, ROC-AUC of 0.6414 and recall of 12.73% indicate limited predictive performance at the default 50% threshold. Accuracy was also below the majority-class baseline of 73.68%.
 
-**Operations perspective:** WhatsApp confirmation and manual verification can reduce avoidable RTOs, potentially saving shipping, packaging and damage costs.
+The September calibration check showed an average predicted risk of 46.01%, compared with an actual RTO rate of 26.14%. This indicates overestimation in that period.
 
-**Marketing perspective:** A ₹20 prepaid discount can encourage customers to switch from COD to prepaid. However, discounts reduce contribution margin and should be offered selectively.
+**Conclusion:** The model is suitable for experimentation and risk prioritisation, not as a standalone authority for cancelling orders.
 
-The dashboard estimates financial impact using configurable intervention assumptions. These are scenario estimates, not realized savings. Actual results must be measured through customer responses, payment conversion and final delivery outcomes.
+## 4. Financial Decision Framework
 
-The business should compare the cost of prepaid discounts against the expected RTO cost avoided and the gross profit potentially lost from incorrectly rejected genuine orders.
+Assignment-supplied financial assumptions:
 
-## 5. Risks and Monitoring
+- Average order value: ₹649
+- Gross margin: 62%, equivalent to ₹402.38 per delivered order
+- Forward shipping: ₹65
+- Return shipping: ₹65
+- Packaging and handling: ₹25
+- Product cost: ₹180
+- Damage probability on returned products: 8%
 
-Key risks include:
+Expected product damage cost per RTO is ₹14.40. Therefore:
 
-- **False positives:** Genuine customers may be classified as high risk.
-- **Model limitations:** The initial model has moderate predictive performance and requires calibration and stronger validation.
-- **LLM inconsistency:** Address quality assessments can vary. Deterministic checks and manual verification should support LLM output.
-- **Customer experience:** Excessive confirmation messages or aggressive prepaid nudges may reduce conversion.
-- **Data privacy:** Customer phone numbers and personally identifiable information must not be unnecessarily shared with the LLM.
-- **Operational bias:** State, courier and marketing correlations should not result in blanket rejection policies.
+**Estimated direct RTO cost = ₹65 + ₹65 + ₹25 + ₹14.40 = ₹169.40.**
 
-Monitor RTO rate, confirmation response rate, prepaid conversion, false-positive rate, cancellation rate, discount cost and net contribution impact.
+If the 62% gross margin excludes forward shipping, delivered contribution after forward shipping is ₹337.38. The break-even RTO probability for shipping versus cancelling is approximately **66.57%**.
 
-## 6. Next Two Weeks
+If the 62% margin already includes forward shipping, delivered contribution is ₹402.38 and the break-even probability is approximately **70.38%**.
 
-**Week 1 – Validation and Pilot Preparation**
+Finance must confirm which margin interpretation is correct before production thresholds are approved.
 
-- Review model predictions and validate feature availability at order time.
-- Evaluate model calibration and performance using time-based validation.
-- Finalize configurable thresholds and customer message templates.
-- Test YES, NO, unclear and no-response scenarios.
-- Prepare an operational manual-review process.
+Customer acquisition cost is ₹300 or more, but it is already incurred when the order reaches the decision stage. It should not be subtracted again as an incremental cancellation cost. Potential lost repeat-customer value cannot be quantified without customer lifetime value data.
 
-**Week 2 – Controlled Pilot**
+## 5. Threshold Analysis
 
-- Run CODGuard on a limited share of eligible COD orders.
-- Keep a comparable control group using the existing process.
-- Track customer confirmation, prepaid conversion and delivered/RTO outcomes.
-- Compare intervention costs, genuine-order losses and RTO savings.
-- Review results with Operations and Marketing before expanding.
+The time-based test set was evaluated at different risk thresholds. A flagged order means the model predicted RTO risk at or above that threshold.
 
-## 7. Final Recommendation
+| Threshold | Flagged orders | Actual RTOs identified | Genuine delivered orders flagged | RTO recall |
+|---|---:|---:|---:|---:|
+| 20% | 291 | 88 | 203 | 80.00% |
+| 40% | 73 | 32 | 41 | 29.09% |
+| 60% | 17 | 11 | 6 | 10.00% |
+| 70% | 5 | 4 | 1 | 3.64% |
+| 80% | 1 | 1 | 0 | 0.91% |
 
-CODGuard AI should initially operate as a decision-support system, not an automatic order-cancellation system.
+A historical cancellation counterfactual produced negative estimated net impact at thresholds from 20% through 60%. At 70%, the estimate was positive ₹340.22, but it involved only five flagged orders. At 80%, it involved only one order.
 
-A controlled pilot with transparent rules, customer-friendly communication and continuous measurement will help determine whether the system can reduce RTO costs without damaging genuine customer conversions.
+These small samples are insufficient to establish a profitable cancellation policy. The results reinforce the need to avoid automatic cancellation.
 
-**The objective is not simply to reject risky orders. It is to deliver more genuine orders while reducing avoidable business losses.**
+## 6. Intervention Economics
+
+The time-based test set was grouped using the current project action bands.
+
+| Action | Orders | Historical RTOs |
+|---|---:|---:|
+| Ship as-is | 127 | 22 |
+| WhatsApp confirmation | 218 | 56 |
+| Prepaid nudge | 56 | 21 |
+| Hold for review | 17 | 11 |
+
+Using configurable illustrative assumptions:
+
+**WhatsApp confirmation**
+- Assumed relative RTO-risk reduction: 30%.
+- Baseline expected RTOs: 59.48.
+- Expected RTOs after intervention: 41.63.
+- Expected RTOs avoided: 17.84.
+- Gross estimated RTO-cost reduction: **₹3,022.55**.
+
+WhatsApp service costs are excluded. This is a simulation, not a measured intervention result.
+
+**Prepaid nudge**
+- Assumed prepaid conversion: 25%.
+- Assumed prepaid RTO probability: 4%.
+- Assumed discount: ₹20 per conversion.
+- Expected conversions: 14.
+- Expected RTOs avoided: 5.99.
+- Discount expense: ₹280.
+- Estimated net impact: **₹734.42** before payment gateway, messaging and other costs.
+
+Both estimates depend on assumptions that need to be tested with actual customers. Expected RTOs avoided are model-based estimates, not guaranteed prevented returns.
+
+## 7. Recommended Operations and Marketing Pilot
+
+Use the following initial policy as a controlled pilot, subject to Finance and Operations approval:
+
+| Predicted risk | Recommended action |
+|---|---|
+| Below 20% | Ship as-is |
+| 20–40% | WhatsApp confirmation |
+| 40–60% | Prepaid nudge |
+| 60–70% | Manual review |
+| 70% and above | Priority manual review |
+
+Do not automatically cancel orders based only on a model score.
+
+**Operations should:**
+- Test WhatsApp confirmation with a recorded YES, NO or no-response outcome.
+- Manually review high-risk orders and record the final decision.
+- Track actual RTO rates, review workload and service costs.
+
+**Marketing should:**
+- Test the prepaid offer and record conversion.
+- Track discount expense and payment costs.
+- Monitor genuine customer drop-off and avoid penalising first-time customers without sufficient evidence.
+
+## 8. Risks and Next Steps
+
+Key risks include weak model recall, probability calibration drift, small high-risk samples, incomplete address validation, courier or marketing mix changes, and unmeasured intervention effectiveness.
+
+The local LLM should be limited to assisting with address/name quality checks. It should not be treated as proof that an address is deliverable or as a replacement for human review.
+
+**Two-week pilot plan:**
+
+1. **Week 1:** Confirm financial assumptions with Finance, configure thresholds, prepare WhatsApp and prepaid workflows, and establish baseline reporting.
+2. **Week 2:** Run a controlled pilot, record intervention responses and outcomes, compare against a suitable control group, and review actual contribution after intervention costs.
+
+### Final Recommendation
+
+Proceed with CODGuard AI as a **human-in-the-loop decision-support pilot**. The historical data indicates meaningful RTO patterns, but current model performance does not justify automatic cancellation. Measure actual WhatsApp and prepaid outcomes before scaling or claiming financial savings.

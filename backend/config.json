@@ -1,16 +1,33 @@
 
 {
-    "risk_thresholds": {
-        "ship_as_is": 0.20,
-        "whatsapp_confirmation": 0.40,
-        "prepaid_nudge": 0.65
-    },
-    "business_rules": {
-        "hold_for_manual_review": true,
-        "never_auto_cancel": true
-    },
-    "prepaid_discount": {
-        "enabled": true,
-        "discount_amount": 20
-    }
+  "risk_thresholds": {
+    "ship_as_is": 0.20,
+    "whatsapp_confirmation": 0.40,
+    "prepaid_nudge": 0.60,
+    "manual_review": 0.70
+  },
+  "financial_assumptions": {
+    "average_order_value": 649,
+    "gross_margin_percentage": 0.62,
+    "delivered_gross_profit": 402.38,
+    "forward_shipping_cost": 65,
+    "return_shipping_cost": 65,
+    "packaging_handling_cost": 25,
+    "product_cost": 180,
+    "damage_probability": 0.08,
+    "prepaid_rto_probability": 0.04,
+    "customer_acquisition_cost": 300,
+    "delivered_gross_profit_includes_forward_shipping": false
+  },
+  "interventions": {
+    "prepaid_discount": 20,
+    "prepaid_conversion_rate": 0.25,
+    "whatsapp_confirmation_success_rate": 0.30,
+    "manual_review_cost_per_order": 10
+  },
+  "business_rules": {
+    "hold_for_manual_review": true,
+    "never_auto_cancel": true,
+    "protect_first_time_customers": true
+  }
 }

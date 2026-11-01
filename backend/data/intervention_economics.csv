@@ -1,0 +1,5 @@
+action,orders,actual_historical_rto,baseline_expected_rto,expected_rto_after_intervention,expected_rto_avoided,expected_prepaid_conversions,intervention_cost,estimated_net_impact
+SHIP_AS_IS,127,22,19.89,19.89,0.0,0.0,0.0,0.0
+WHATSAPP_CONFIRMATION,218,56,59.48,41.63,17.84,0.0,0.0,3022.55
+PREPAID_NUDGE,56,21,26.19,20.21,5.99,14.0,280.0,734.42
+HOLD_FOR_REVIEW,17,11,11.68,11.68,0.0,0.0,0.0,0.0

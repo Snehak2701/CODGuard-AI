@@ -16,7 +16,7 @@ from pathlib import Path
 BACKEND_DIR = Path(__file__).resolve().parent.parent
 CONFIG_PATH = BACKEND_DIR / "config.json"
 
-with open(CONFIG_PATH, "r") as file:
+with open(CONFIG_PATH, "r", encoding="utf-8") as file:
     config = json.load(file)
 
 
@@ -38,14 +38,44 @@ def run_codguard(order):
     print("\nCustomer Validation:")
     print(json.dumps(llm_result, indent=4))
 
-    # Step 3: Make decision
-    decision = make_decision(risk, llm_result)
+    # Step 3: Make financially informed decision
+    decision = make_decision(risk, llm_result, order)
 
     print("\nFinal Decision:")
     print("Action:", decision["action"])
     print("Reason:", decision["reason"])
 
-    # Step 4: Generate relevant message
+    # Step 4: Display financial analysis
+    financials = decision["financials"]
+
+    print("\nFinancial Analysis:")
+    print(
+        "Expected contribution if shipped: ₹",
+        financials["expected_ship_contribution"]
+    )
+    print(
+        "Expected contribution if cancelled: ₹",
+        financials["expected_cancel_contribution"]
+    )
+    print(
+        "Expected RTO cost: ₹",
+        financials["expected_rto_cost"]
+    )
+    print(
+        "Break-even RTO risk:",
+        financials["break_even_rto_probability"] * 100,
+        "%"
+    )
+    print(
+        "Expected prepaid-nudge contribution: ₹",
+        financials["expected_prepaid_nudge_contribution"]
+    )
+    print(
+        "Expected confirmation contribution: ₹",
+        financials["expected_confirmation_contribution"]
+    )
+
+    # Step 5: Generate relevant customer message
     action = decision["action"]
 
     if action == "CONFIRM_ON_WHATSAPP":
@@ -61,7 +91,7 @@ def run_codguard(order):
 
     elif action == "NUDGE_TO_PREPAID":
 
-        discount = config["prepaid_discount"]["discount_amount"]
+        discount = config["interventions"]["prepaid_discount"]
 
         message = get_prepaid_message(
             order["customer_name"],
@@ -75,11 +105,13 @@ def run_codguard(order):
     elif action == "HOLD_FOR_REVIEW":
 
         print("\nOrder sent for manual review.")
+        print("No automatic cancellation has been performed.")
 
-    else:
+    elif action == "SHIP_AS_IS":
 
         print("\nOrder approved for shipping.")
 
+    # Step 6: Return complete result
     return {
         "order_id": order["order_id"],
         "rto_probability": risk,

@@ -2,11 +2,13 @@
 import streamlit as st
 import pandas as pd
 import joblib
+import json
 from pathlib import Path
 
-# -----------------------------
-# PAGE CONFIGURATION
-# -----------------------------
+
+# --------------------------------------------------
+# 1. PAGE CONFIGURATION
+# --------------------------------------------------
 
 st.set_page_config(
     page_title="CODGuard AI Dashboard",
@@ -16,30 +18,42 @@ st.set_page_config(
 
 st.title("📦 CODGuard AI")
 st.subheader("Founder Dashboard")
-st.caption("Historical order analysis and ML-based RTO risk monitoring")
+st.caption(
+    "Historical order analysis, ML-based RTO risk monitoring "
+    "and financial decision support"
+)
 
-# -----------------------------
-# LOAD DATA AND MODEL
-# -----------------------------
+
+# --------------------------------------------------
+# 2. LOAD CONFIGURATION, DATA AND MODEL
+# --------------------------------------------------
 
 ROOT_DIR = Path(__file__).resolve().parent.parent
+
 DATA_PATH = ROOT_DIR / "backend" / "data" / "orders_sample.csv"
 MODEL_PATH = ROOT_DIR / "backend" / "models" / "codguard_model.pkl"
+CONFIG_PATH = ROOT_DIR / "backend" / "config.json"
+
+
+@st.cache_data
+def load_config():
+    with open(CONFIG_PATH, "r", encoding="utf-8") as file:
+        return json.load(file)
+
 
 @st.cache_data
 def load_data():
     df = pd.read_csv(DATA_PATH)
 
-    # Remove exact duplicate rows
     df = df.drop_duplicates().copy()
 
-    # Normalize order status
     df["final_status"] = (
         df["final_status"].astype(str).str.strip().str.upper()
     )
 
-    # Exclude orders whose final outcome is not known
-    df = df[df["final_status"].isin(["DELIVERED", "RTO"])].copy()
+    df = df[
+        df["final_status"].isin(["DELIVERED", "RTO"])
+    ].copy()
 
     df["order_datetime"] = pd.to_datetime(
         df["order_datetime"], errors="coerce"
@@ -54,12 +68,50 @@ def load_model():
     return saved_model["model"]
 
 
+config = load_config()
 df = load_data()
 model = load_model()
 
-# -----------------------------
-# PREDICT RTO RISK
-# -----------------------------
+THRESHOLDS = config["risk_thresholds"]
+FINANCIAL = config["financial_assumptions"]
+INTERVENTIONS = config["interventions"]
+
+
+# --------------------------------------------------
+# 3. FINANCIAL ASSUMPTIONS
+# --------------------------------------------------
+
+forward_cost = FINANCIAL["forward_shipping_cost"]
+return_cost = FINANCIAL["return_shipping_cost"]
+packaging_cost = FINANCIAL["packaging_handling_cost"]
+
+damage_cost = (
+    FINANCIAL["product_cost"]
+    * FINANCIAL["damage_probability"]
+)
+
+rto_cost = (
+    forward_cost
+    + return_cost
+    + packaging_cost
+    + damage_cost
+)
+
+gross_profit = FINANCIAL["delivered_gross_profit"]
+
+if FINANCIAL["delivered_gross_profit_includes_forward_shipping"]:
+    delivered_contribution = gross_profit
+else:
+    delivered_contribution = gross_profit - forward_cost
+
+prepaid_rto = FINANCIAL["prepaid_rto_probability"]
+prepaid_discount = INTERVENTIONS["prepaid_discount"]
+manual_review_cost = INTERVENTIONS["manual_review_cost_per_order"]
+
+
+# --------------------------------------------------
+# 4. PREDICT RTO RISK
+# --------------------------------------------------
 
 features = [
     "order_value",
@@ -75,27 +127,51 @@ df["predicted_rto_probability"] = model.predict_proba(
     df[features]
 )[:, 1]
 
+
+# --------------------------------------------------
+# 5. ASSIGN RISK BUCKETS
+# --------------------------------------------------
+
+risk_bins = [
+    0,
+    THRESHOLDS["ship_as_is"],
+    THRESHOLDS["whatsapp_confirmation"],
+    THRESHOLDS["prepaid_nudge"],
+    THRESHOLDS["manual_review"],
+    1.000001
+]
+
+risk_labels = [
+    "Low",
+    "Moderate",
+    "High",
+    "Very High",
+    "Critical"
+]
+
 df["risk_bucket"] = pd.cut(
     df["predicted_rto_probability"],
-    bins=[-0.001, 0.20, 0.40, 0.65, 1.0],
-    labels=["Low", "Moderate", "High", "Very High"]
+    bins=risk_bins,
+    labels=risk_labels,
+    right=False
 )
 
-# -----------------------------
-# CODGUARD DECISION BUCKETS
-# -----------------------------
+
+# --------------------------------------------------
+# 6. ASSIGN CODGUARD ACTIONS
+# --------------------------------------------------
 
 def assign_action(row):
 
     risk = row["predicted_rto_probability"]
 
-    if risk < 0.20:
+    if risk < THRESHOLDS["ship_as_is"]:
         return "SHIP_AS_IS"
 
-    elif risk < 0.40:
+    elif risk < THRESHOLDS["whatsapp_confirmation"]:
         return "CONFIRM_ON_WHATSAPP"
 
-    elif risk < 0.65:
+    elif risk < THRESHOLDS["prepaid_nudge"]:
         return "NUDGE_TO_PREPAID"
 
     else:
@@ -104,24 +180,10 @@ def assign_action(row):
 
 df["decision_action"] = df.apply(assign_action, axis=1)
 
-# Count orders in each decision bucket
-decision_counts = (
-    df["decision_action"]
-    .value_counts()
-    .reindex(
-        [
-            "SHIP_AS_IS",
-            "CONFIRM_ON_WHATSAPP",
-            "NUDGE_TO_PREPAID",
-            "HOLD_FOR_REVIEW"
-        ],
-        fill_value=0
-    )
-)
 
-# -----------------------------
-# SIDEBAR FILTERS
-# -----------------------------
+# --------------------------------------------------
+# 7. SIDEBAR FILTERS
+# --------------------------------------------------
 
 st.sidebar.header("Dashboard Filters")
 
@@ -133,24 +195,42 @@ selected_states = st.sidebar.multiselect(
     default=states
 )
 
-filtered_df = df[df["state"].isin(selected_states)].copy()
+filtered_df = df[
+    df["state"].isin(selected_states)
+].copy()
 
-# -----------------------------
-# KEY METRICS
-# -----------------------------
+
+# --------------------------------------------------
+# 8. KEY BUSINESS METRICS
+# --------------------------------------------------
 
 total_orders = len(filtered_df)
-total_rto = (filtered_df["final_status"] == "RTO").sum()
-total_delivered = (filtered_df["final_status"] == "DELIVERED").sum()
+
+total_rto = (
+    filtered_df["final_status"] == "RTO"
+).sum()
+
+total_delivered = (
+    filtered_df["final_status"] == "DELIVERED"
+).sum()
 
 rto_rate = (
-    total_rto / total_orders * 100 if total_orders else 0
+    total_rto / total_orders * 100
+    if total_orders else 0
 )
 
+if total_orders:
+    min_date = filtered_df["order_datetime"].min()
+    max_date = filtered_df["order_datetime"].max()
+
+    st.caption(
+        f"Historical dataset: {min_date:%d %b %Y}"
+        f" – {max_date:%d %b %Y}"
+    )
+
 st.caption(
-    f"Dataset snapshot: {filtered_df['order_datetime'].min():%d %b %Y}"
-    f" – {filtered_df['order_datetime'].max():%d %b %Y}"
-    if total_orders else "No orders in selected filters"
+    "This dashboard uses historical sample data, not live Shopify "
+    "orders or live yesterday's operational data."
 )
 
 col1, col2, col3, col4 = st.columns(4)
@@ -162,29 +242,30 @@ col4.metric("Actual RTO Rate", f"{rto_rate:.2f}%")
 
 st.divider()
 
-# -----------------------------
-# CODGUARD DECISION BUCKETS
-# -----------------------------
+
+# --------------------------------------------------
+# 9. CODGUARD DECISION DISTRIBUTION
+# --------------------------------------------------
 
 st.subheader("CODGuard AI - Decision Distribution")
 
-filtered_decisions = (
-    filtered_df["decision_action"].value_counts()
+action_order = [
+    "SHIP_AS_IS",
+    "CONFIRM_ON_WHATSAPP",
+    "NUDGE_TO_PREPAID",
+    "HOLD_FOR_REVIEW"
+]
+
+decision_counts = (
+    filtered_df["decision_action"]
+    .value_counts()
+    .reindex(action_order, fill_value=0)
 )
 
-ship_count = filtered_decisions.get("SHIP_AS_IS", 0)
-
-confirm_count = filtered_decisions.get(
-    "CONFIRM_ON_WHATSAPP", 0
-)
-
-prepaid_count = filtered_decisions.get(
-    "NUDGE_TO_PREPAID", 0
-)
-
-hold_count = filtered_decisions.get(
-    "HOLD_FOR_REVIEW", 0
-)
+ship_count = decision_counts["SHIP_AS_IS"]
+confirm_count = decision_counts["CONFIRM_ON_WHATSAPP"]
+prepaid_count = decision_counts["NUDGE_TO_PREPAID"]
+hold_count = decision_counts["HOLD_FOR_REVIEW"]
 
 col1, col2, col3, col4 = st.columns(4)
 
@@ -202,82 +283,88 @@ decision_chart = pd.Series({
 
 st.bar_chart(decision_chart)
 
-# -----------------------------
-# FINANCIAL IMPACT SIMULATOR
-# -----------------------------
-
-st.divider()
-st.subheader("Financial Impact Analysis")
-
 st.caption(
-    "Scenario estimates based on configurable assumptions. "
-    "These are not measured or realized savings."
+    "Decision thresholds are loaded from backend/config.json. "
+    "Orders in the 60–70% and 70%+ bands are both held for review."
 )
 
-# Assignment business assumptions
-RTO_COST = 169.40
-DELIVERED_GROSS_PROFIT = 402.38
-PREPAID_DISCOUNT = 20
 
-# Founder can adjust intervention assumptions
-st.markdown("### Business assumptions")
+# --------------------------------------------------
+# 10. FINANCIAL IMPACT SIMULATOR
+# --------------------------------------------------
+
+st.divider()
+st.subheader("Financial Impact Simulator")
+
+st.caption(
+    "Illustrative scenario estimates using the assignment's "
+    "business assumptions. These are not actual or guaranteed savings."
+)
+
+st.markdown("### Adjustable intervention assumptions")
 
 col1, col2, col3 = st.columns(3)
 
 with col1:
     intervention_success = st.slider(
-        "Confirmation/prepaid intervention success (%)",
+        "WhatsApp confirmation risk reduction (%)",
         min_value=0,
         max_value=100,
-        value=30
+        value=int(
+            INTERVENTIONS["whatsapp_confirmation_success_rate"] * 100
+        )
     )
 
 with col2:
+    prepaid_conversion = st.slider(
+        "Prepaid conversion rate (%)",
+        min_value=0,
+        max_value=100,
+        value=int(
+            INTERVENTIONS["prepaid_conversion_rate"] * 100
+        )
+    )
+
+with col3:
     manual_cancel_rate = st.slider(
-        "Genuine hold orders incorrectly cancelled (%)",
+        "Held orders eventually cancelled after review (%)",
         min_value=0,
         max_value=100,
         value=10
     )
 
-with col3:
-    prepaid_conversion = st.slider(
-        "Prepaid nudge conversion (%)",
-        min_value=0,
-        max_value=100,
-        value=25
-    )
 
-# Count actionable orders
-confirmation_orders = (
+# Count intervention groups
+confirmation_df = filtered_df[
     filtered_df["decision_action"] == "CONFIRM_ON_WHATSAPP"
-).sum()
+]
 
-prepaid_orders = (
+prepaid_df = filtered_df[
     filtered_df["decision_action"] == "NUDGE_TO_PREPAID"
-).sum()
+]
 
-hold_orders = (
+hold_df = filtered_df[
     filtered_df["decision_action"] == "HOLD_FOR_REVIEW"
-).sum()
+]
 
-# Average predicted risk for each group
-confirmation_risk = filtered_df.loc[
-    filtered_df["decision_action"] == "CONFIRM_ON_WHATSAPP",
-    "predicted_rto_probability"
-].mean()
+confirmation_orders = len(confirmation_df)
+prepaid_orders = len(prepaid_df)
+hold_orders = len(hold_df)
 
-prepaid_risk = filtered_df.loc[
-    filtered_df["decision_action"] == "NUDGE_TO_PREPAID",
-    "predicted_rto_probability"
-].mean()
 
-hold_risk = filtered_df.loc[
-    filtered_df["decision_action"] == "HOLD_FOR_REVIEW",
-    "predicted_rto_probability"
-].mean()
+# Average predicted risk in each group
+confirmation_risk = (
+    confirmation_df["predicted_rto_probability"].mean()
+)
 
-# Handle empty groups
+prepaid_risk = (
+    prepaid_df["predicted_rto_probability"].mean()
+)
+
+hold_risk = (
+    hold_df["predicted_rto_probability"].mean()
+)
+
 confirmation_risk = (
     0 if pd.isna(confirmation_risk) else confirmation_risk
 )
@@ -290,49 +377,73 @@ hold_risk = (
     0 if pd.isna(hold_risk) else hold_risk
 )
 
-# Estimated RTOs avoided by successful interventions
+
+# Estimated RTOs avoided through confirmation
 confirmation_saves = (
     confirmation_orders
     * confirmation_risk
     * intervention_success / 100
 )
 
+
+# Prepaid savings must account for the residual prepaid RTO rate
+prepaid_risk_reduction = max(
+    0,
+    prepaid_risk - prepaid_rto
+)
+
 prepaid_saves = (
     prepaid_orders
-    * prepaid_risk
+    * prepaid_risk_reduction
     * prepaid_conversion / 100
 )
 
-estimated_rtos_avoided = confirmation_saves + prepaid_saves
 
-estimated_rto_savings = estimated_rtos_avoided * RTO_COST
+estimated_rtos_avoided = (
+    confirmation_saves + prepaid_saves
+)
 
-# Estimated genuine orders incorrectly cancelled
+estimated_rto_savings = (
+    estimated_rtos_avoided * rto_cost
+)
+
+
+# Hypothetical genuine orders cancelled after manual review
 estimated_genuine_lost = (
     hold_orders
     * (1 - hold_risk)
     * manual_cancel_rate / 100
 )
 
-estimated_lost_profit = (
-    estimated_genuine_lost * DELIVERED_GROSS_PROFIT
+estimated_lost_contribution = (
+    estimated_genuine_lost * delivered_contribution
 )
 
-# Estimated prepaid discount expenditure
+
+# Prepaid discount expense
 estimated_discount_cost = (
     prepaid_orders
     * prepaid_conversion / 100
-    * PREPAID_DISCOUNT
+    * prepaid_discount
 )
+
+
+# Manual review expense
+estimated_review_cost = (
+    hold_orders * manual_review_cost
+)
+
 
 # Net estimated impact
 net_impact = (
     estimated_rto_savings
-    - estimated_lost_profit
+    - estimated_lost_contribution
     - estimated_discount_cost
+    - estimated_review_cost
 )
 
-# Display financial metrics
+
+# Display financial impact
 st.markdown("### Estimated business impact")
 
 col1, col2 = st.columns(2)
@@ -355,8 +466,8 @@ col3.metric(
 )
 
 col4.metric(
-    "Estimated Lost Gross Profit",
-    f"₹{estimated_lost_profit:,.2f}"
+    "Estimated Lost Contribution",
+    f"₹{estimated_lost_contribution:,.2f}"
 )
 
 col5, col6 = st.columns(2)
@@ -367,34 +478,48 @@ col5.metric(
 )
 
 col6.metric(
-    "Estimated Net Impact",
+    "Manual Review Cost",
+    f"₹{estimated_review_cost:,.2f}"
+)
+
+st.metric(
+    "Estimated Net Financial Impact",
     f"₹{net_impact:,.2f}"
 )
 
 st.caption(
-    "Formula: RTO savings − lost delivered gross profit − prepaid "
-    "discount expenditure. Estimates assume the selected intervention "
-    "success rates apply to predicted risk. Validate these assumptions "
-    "through a controlled experiment before claiming realized impact."
+    "Formula: estimated RTO savings − lost delivered contribution "
+    "− prepaid discounts − manual review cost. The cancellation "
+    "slider represents a hypothetical human decision after review, "
+    "not automatic cancellation by CODGuard."
 )
 
-# -----------------------------
-# RTO RISK DISTRIBUTION
-# -----------------------------
+st.caption(
+    f"Financial assumptions: delivered contribution ₹{delivered_contribution:.2f}, "
+    f"RTO cost ₹{rto_cost:.2f}, prepaid RTO rate {prepaid_rto:.0%}, "
+    f"prepaid discount ₹{prepaid_discount:.2f}."
+)
 
+
+# --------------------------------------------------
+# 11. RTO RISK DISTRIBUTION
+# --------------------------------------------------
+
+st.divider()
 st.subheader("Predicted RTO Risk Distribution")
 
 risk_counts = (
     filtered_df["risk_bucket"]
     .value_counts()
-    .reindex(["Low", "Moderate", "High", "Very High"], fill_value=0)
+    .reindex(risk_labels, fill_value=0)
 )
 
 st.bar_chart(risk_counts)
 
-# -----------------------------
-# ACTUAL ORDER OUTCOMES
-# -----------------------------
+
+# --------------------------------------------------
+# 12. ACTUAL ORDER OUTCOMES
+# --------------------------------------------------
 
 st.subheader("Actual Order Outcomes")
 
@@ -402,13 +527,16 @@ outcome_counts = filtered_df["final_status"].value_counts()
 
 st.bar_chart(outcome_counts)
 
-# -----------------------------
-# MONTHLY RTO TREND
-# -----------------------------
+
+# --------------------------------------------------
+# 13. MONTHLY RTO TREND
+# --------------------------------------------------
 
 st.subheader("Monthly RTO Trend")
 
-monthly = filtered_df.copy()
+monthly = filtered_df.dropna(
+    subset=["order_datetime"]
+).copy()
 
 monthly["month"] = (
     monthly["order_datetime"].dt.to_period("M").astype(str)
@@ -418,48 +546,53 @@ monthly_summary = (
     monthly.groupby("month")
     .agg(
         total_orders=("order_id", "count"),
-        rto_orders=("final_status", lambda x: (x == "RTO").sum())
+        rto_orders=(
+            "final_status",
+            lambda x: (x == "RTO").sum()
+        )
     )
 )
 
 monthly_summary["rto_rate"] = (
-    monthly_summary["rto_orders"] /
-    monthly_summary["total_orders"] * 100
+    monthly_summary["rto_orders"]
+    / monthly_summary["total_orders"] * 100
 )
 
 st.line_chart(monthly_summary["rto_rate"])
 
-# -----------------------------
-# FINANCIAL OVERVIEW
-# -----------------------------
 
-st.subheader("Estimated RTO Cost")
+# --------------------------------------------------
+# 14. HISTORICAL RTO COST
+# --------------------------------------------------
 
-RTO_COST = 169.40
+st.divider()
+st.subheader("Historical RTO Cost")
 
-estimated_rto_cost = total_rto * RTO_COST
+estimated_historical_rto_cost = total_rto * rto_cost
 
 col1, col2 = st.columns(2)
 
 col1.metric(
     "Estimated Direct RTO Cost",
-    f"₹{estimated_rto_cost:,.2f}"
+    f"₹{estimated_historical_rto_cost:,.2f}"
 )
 
 col2.metric(
-    "Direct Cost per RTO",
-    f"₹{RTO_COST:,.2f}"
+    "Estimated Direct Cost per RTO",
+    f"₹{rto_cost:,.2f}"
 )
 
 st.caption(
-    "Estimated historical direct RTO cost using the assignment's "
-    "₹169.40 cost assumption. This is not verified realized savings."
+    "Historical direct cost is calculated using the configured "
+    "₹169.40 RTO cost assumption. It is not measured realized savings."
 )
 
-# -----------------------------
-# ORDER TABLE
-# -----------------------------
 
+# --------------------------------------------------
+# 15. ORDER-LEVEL DETAILS
+# --------------------------------------------------
+
+st.divider()
 st.subheader("Order-Level Risk Details")
 
 display_columns = [
@@ -470,7 +603,8 @@ display_columns = [
     "order_value",
     "final_status",
     "predicted_rto_probability",
-    "risk_bucket"
+    "risk_bucket",
+    "decision_action"
 ]
 
 display_df = filtered_df[display_columns].copy()
@@ -488,4 +622,15 @@ st.dataframe(
     hide_index=True
 )
 
+
+# --------------------------------------------------
+# 16. FOOTER
+# --------------------------------------------------
+
 st.success("CODGuard AI dashboard loaded successfully!")
+
+st.caption(
+    "Note: Historical predictions are retrospective model estimates. "
+    "The model's predictive performance and intervention assumptions "
+    "should be validated before operational deployment."
+)
